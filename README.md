@@ -73,7 +73,7 @@ Get **the Horizon launcher** from [playhorizon.dev](https://playhorizon.dev), or
 | macOS, Intel | `horizon-launcher-macos-x64.dmg` | macOS 12 or later |
 | Linux x86-64 | `horizon-launcher-linux-x86_64.AppImage` or `.tar.gz` | a glibc distribution, X11 or Wayland, a GPU with Vulkan or OpenGL 3.3 |
 
-**You also need a Microsoft account that owns Minecraft: Java Edition.** You sign in with it in the launcher, which plays only with an account that owns the game ([why](docs/microsoft-account.md)). Horizon contains no Minecraft code or assets: an existing install (official launcher, Prism, MultiMC...) is reused, and without one the launcher downloads 26.3 from Mojang for your account. Step by step: [Install and first launch](https://playhorizon.dev/docs/install).
+**No Microsoft account is needed to play.** Offline names, LAN, offline-mode servers and single player work without signing in; a Microsoft account is optional, for online-mode servers and for downloading 26.3 from Mojang ([details](docs/microsoft-account.md)). Horizon contains no Minecraft code or assets: an existing install (official launcher, Prism, MultiMC...) is reused, and without one the launcher downloads 26.3 from Mojang for an account that owns the game. Step by step: [Install and first launch](https://playhorizon.dev/docs/install).
 
 <table>
   <tr>

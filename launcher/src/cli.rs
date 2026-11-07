@@ -108,8 +108,8 @@ enum ServersCmd {
 enum AccountCmd {
     /// The signed-in accounts and which one plays
     List,
-    /// Sign in with a Microsoft account in your browser (device code). Play needs one that owns
-    /// Minecraft: Java Edition
+    /// Sign in with a Microsoft account in your browser (device code). Optional: it plays
+    /// online-mode servers with your name and skin
     SignIn {
         /// Sign this account (name or UUID) in again: another Microsoft account is refused and
         /// who plays stays the same
@@ -128,9 +128,8 @@ enum AccountCmd {
     },
     /// Play as this account, or as one of your offline names
     Select { who: String },
-    /// Play offline (LAN, offline-mode servers) beside a signed-in account that owns the game:
-    /// as NAME (kept to switch back to; 3 to 16 letters, digits or _), or as the name the game
-    /// made up
+    /// Play offline (LAN, offline-mode servers) without an account: as NAME (kept to switch back
+    /// to; 3 to 16 letters, digits or _), or as the name the game made up
     Offline { name: Option<String> },
     /// Forget one of your offline names; its skin and cape go with it
     ForgetOffline { name: String },
@@ -741,7 +740,7 @@ enum Cmd {
         #[arg(long)]
         version: Option<String>,
     },
-    /// Start the client (needs a signed-in Microsoft account that owns Minecraft: Java Edition)
+    /// Start the client (offline by default; sign in for online-mode servers)
     Play {
         #[arg(long)]
         version: Option<String>,
@@ -1930,8 +1929,8 @@ fn account_command(action: AccountCmd, as_json: bool) -> Result<(), String> {
                 }));
             } else if accounts.accounts.is_empty() && accounts.offline.is_empty() {
                 println!(
-                    "No Microsoft account signed in. Play needs one that owns Minecraft: Java \
-                     Edition: horizon-launcher account sign-in"
+                    "No Microsoft account signed in. Playing offline as the game's own name \
+                     (`horizon-launcher account sign-in` adds one for online servers)."
                 );
             } else {
                 for a in &accounts.accounts {
@@ -1951,9 +1950,6 @@ fn account_command(action: AccountCmd, as_json: bool) -> Result<(), String> {
                     println!(
                         "Playing offline as the game's own name (`account select NAME` to switch)."
                     );
-                }
-                if !accounts.has_owner(account::store()) {
-                    println!("{} {}", account::NoOwner, tr(backend::SIGN_IN_HINT));
                 }
             }
         }

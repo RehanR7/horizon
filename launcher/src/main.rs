@@ -13,7 +13,6 @@ mod console;
 mod console_page;
 mod cull;
 mod datapacks_page;
-mod dev_options;
 mod export_page;
 mod frame;
 mod game_tools;
@@ -122,7 +121,7 @@ enum Page {
 impl Page {
     /// `HORIZON_LAUNCHER_PAGE=mods` (or `modpacks`, `resourcepacks`, `shaders`, `servers`, `versions`,
     /// `settings`) opens on that page, for screenshots; Home otherwise (`getting-ready`: Home
-    /// preparing, `home::getting_ready_preview`; `sign-in`: the owner gate's sheet with a
+    /// preparing, `home::getting_ready_preview`; `sign-in`: the sign-in sheet with a
     /// made-up code, `owner_page::sign_in_preview`; `new-instance`: Home with the New instance
     /// dialog open on Modded; `edit-instance`: the selected one's Edit dialog; `worlds`, `packs`...: Home on that tab, `HomeTab::from_env`).
     fn from_env() -> Page {
@@ -376,15 +375,11 @@ struct Launcher {
     sign_in_state: Option<SignInState>,
     /// What to say when the keychain doesn't keep sign-ins ([`account::no_keychain`]).
     keychain: Option<String>,
-    /// Whether an account here owns the game, by the keychain's last answers (the owner gate);
-    /// none until the keychain has been read.
+    /// Whether an account here owns the game, by the keychain's last answers (informational:
+    /// play never requires it); none until the keychain has been read.
     owner: Option<bool>,
-    /// Play was refused (or Home's Sign in pressed): the owner gate's screen is open.
+    /// The sign-in screen is open (from Settings or Home's Sign in).
     owner_screen_open: bool,
-    /// Clicks on the sidebar's launcher version, and whether they revealed the developer options
-    /// (`dev_options`) for this run.
-    dev_clicks: u8,
-    dev_options: bool,
     /// The game is waiting for its session (a token renewal), or a Java instance for its files
     /// and Java (`start_java`), before it starts.
     starting_client: Option<String>,
@@ -691,8 +686,6 @@ impl Launcher {
             keychain: None,
             owner: None,
             owner_screen_open: false,
-            dev_clicks: 0,
-            dev_options: false,
             starting_client: None,
             play_when_prepared: None,
             friend_code: line_edit::LineEdit::new(String::new(), 256, 32),
@@ -1221,10 +1214,6 @@ impl Launcher {
                                 continue;
                             }
                         };
-                        // Past the gate by the developer option alone is no owner.
-                        if !self.settings.dev_offline {
-                            self.owner = Some(true);
-                        }
                         if let Some(file) = file {
                             cmd.arg("--session-file").arg(file);
                         }
@@ -1570,10 +1559,6 @@ impl Launcher {
                     self.owner = Some(true);
                     self.owner_screen_open = false;
                     self.client_error = None;
-                    if !self.settings.owner_notice_seen {
-                        self.settings.owner_notice_seen = true;
-                        self.save_settings();
-                    }
                 }
                 changed = true;
             }
@@ -1886,7 +1871,6 @@ impl Launcher {
         self.starting_client = Some(tag.clone());
         self.play_pressed = Some(Instant::now());
         let tx = self.tx.clone();
-        let offline_without_owner = self.settings.dev_offline;
         // Registry mods update before the game reads them (`horizon::auto`); native mods only
         // at start, where a build can follow.
         let auto = self
@@ -1906,7 +1890,7 @@ impl Launcher {
                     let _ = mods_tx.send(mods_page::Event::AutoUpdated(lines, Vec::new()));
                 }
             }
-            let session = account::session_for_game(&backend::game_home(), offline_without_owner);
+            let session = account::session_for_game(&backend::game_home());
             let _ = tx.send(Msg::Session(session));
         });
     }
@@ -2479,7 +2463,8 @@ enum PlayPress {
     /// Not prepared, for an account that owns the game: prepare it (from the player's install,
     /// else downloaded from Mojang for that account), then play, as the official launcher does.
     PrepareThenPlay,
-    /// Not prepared and no owner (signing in comes first), or busy preparing or playing.
+    /// Not prepared and no owner (prepare from your own install first), or busy preparing or
+    /// playing.
     Nothing,
 }
 
@@ -3167,11 +3152,7 @@ impl Launcher {
                 .id("launcher-version")
                 .px(px(8.))
                 .pt(px(6.))
-                .child(trf("Launcher {version}", &[("version", backend::VERSION)]))
-                .on_click(cx.listener(|this, _: &ClickEvent, _, cx| {
-                    this.version_clicked();
-                    cx.notify();
-                })),
+                .child(trf("Launcher {version}", &[("version", backend::VERSION)])),
         );
         // Custom title bars carry the mark and name already.
         let brand = (!titlebar::draws_brand(window)).then(|| {
@@ -3386,8 +3367,8 @@ impl Launcher {
         let left = self.download_left();
         let steps = self.preparing.then(|| self.steps(&version, left));
 
-        // Not prepared: an owner can have Horizon download Minecraft from Mojang; without an
-        // owner there is nothing to play, so signing in comes first.
+        // Not prepared: an owner can have Horizon download Minecraft from Mojang; without one,
+        // the player prepares from their own install.
         let first = (!prepared && !self.preparing)
             .then_some(self.owner_shown())
             .flatten();
@@ -3536,30 +3517,11 @@ impl Launcher {
                 &t,
             )),
         };
-        // The top bar shows who plays; a row only when there is something to do about it: no
-        // account that owns the game (Play needs one), or offline. The glass look's top bar has
-        // Sign in with Microsoft and says Offline itself.
+        // The top bar shows who plays; a row only when the player is offline, to say that online
+        // servers need a Microsoft account. The glass look's top bar has Sign in with Microsoft
+        // and says Offline itself.
         if !t.glass {
-            if self.owner_shown() == Some(false) {
-                rows = rows.child(index_row(
-                    5,
-                    tr("Microsoft account"),
-                    Some(
-                        div()
-                            .child(format!("{}.", tr(account::NEEDS_OWNER)))
-                            .into_any_element(),
-                    ),
-                    Some(
-                        microsoft::sign_in_button("gate-sign-in", &t)
-                            .on_click(cx.listener(|this, _: &ClickEvent, _, cx| {
-                                this.sign_in_to_play();
-                                cx.notify();
-                            }))
-                            .into_any_element(),
-                    ),
-                    &t,
-                ));
-            } else if self.accounts.selected().is_none() && account::client_id().is_some() {
+            if self.accounts.selected().is_none() && account::client_id().is_some() {
                 rows = rows.child(index_row(
                     5,
                     tr("Playing offline"),
@@ -4095,7 +4057,6 @@ impl Launcher {
             )
             .child(self.collection_section(cx))
             .children(self.agents_section(cx))
-            .children(self.dev_options_section(cx))
     }
 
     /// The warning before a native build: what the mods can do and which mods. The build starts
@@ -4586,7 +4547,7 @@ impl Launcher {
             }
             Some(SignInState::Done(Err(e))) => div().text_color(t.danger).child(e.clone()),
             None if self.accounts.accounts.is_empty() => div().child(tr(
-                "Horizon needs a Microsoft account that owns Minecraft: Java Edition, like other launchers. It also plays online servers with your name and skin.",
+                "Optional: sign in to join online-mode servers with your name and skin. Offline play needs no account.",
             )),
             None => div().child(tr("Add another account.")),
         };

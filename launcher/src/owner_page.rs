@@ -1,26 +1,21 @@
-//! The owner gate in the window (`horizon_launcher::account::launch`): the screen that asks for a
-//! Microsoft account that owns Minecraft: Java Edition. It covers the launcher once for players
-//! without one (those who played offline before the gate), and again whenever Play is refused.
-//! The sign-in runs on it, code and all.
+//! The Microsoft sign-in screen: the device code, code and all. Playing never requires it, so it
+//! only covers the window when the player asks to sign in (Settings, Home) or a screenshot preview
+//! asks for it. Online-mode servers are the reason to sign in.
 use super::*;
 
 impl Launcher {
-    /// Whether the screen covers the window: no owner, and either Play was refused or the player
-    /// hasn't read it yet. The data question comes first.
+    /// Whether the sign-in screen covers the window. Playing offline never opens it; the data
+    /// question comes first.
     pub(crate) fn asking_owner(&self) -> bool {
-        (self.owner_shown() == Some(false) || sign_in_preview())
-            && (self.owner_screen_open || !self.settings.owner_notice_seen || sign_in_preview())
+        (self.owner_screen_open || sign_in_preview())
             && !self.asking_consent()
             && self.opening.is_none()
     }
 
-    /// `owner` as the window shows it: the developer option that lets offline names play without
-    /// an owner (`dev_options`) hides the gate, as if the keychain hadn't answered yet.
+    /// `owner` as the window shows it: `Some(true)` only when an account here owns the game, so
+    /// the UI never treats a missing owner as a reason to stop playing.
     pub(crate) fn owner_shown(&self) -> Option<bool> {
-        match self.owner {
-            Some(false) if self.settings.dev_offline => None,
-            owner => owner,
-        }
+        self.owner.filter(|owns| *owns)
     }
 
     /// Opens the screen and starts the sign-in on it.
@@ -33,10 +28,6 @@ impl Launcher {
     fn close_owner_screen(&mut self) {
         self.cancel_sign_in();
         self.owner_screen_open = false;
-        if !self.settings.owner_notice_seen {
-            self.settings.owner_notice_seen = true;
-            self.save_settings();
-        }
     }
 
     pub(crate) fn owner_screen(&mut self, cx: &mut Context<Self>) -> Stateful<Div> {
@@ -74,14 +65,14 @@ impl Launcher {
             .child(
                 shell::text(theme::night::TITLE, shell::c(n.ink))
                     .mb(px(4.))
-                    .child(tr("Sign in to play").to_string()),
+                    .child(tr("Sign in to play online").to_string()),
             )
             .child(line(
-                "Horizon needs a Microsoft account that owns Minecraft: Java Edition, like other launchers.",
+                "Optional: a Microsoft account lets you join online-mode servers with your name and skin. Offline play needs none.",
                 n.ink_soft,
             ))
             .child(line(
-                "No Minecraft install needed: Horizon downloads it from Mojang for your account.",
+                "An account that owns Minecraft: Java Edition can also download it from Mojang.",
                 n.ink_soft,
             ))
             .child(line(
@@ -312,7 +303,7 @@ impl Launcher {
                     .text_size(px(28.))
                     .line_height(px(35.))
                     .text_color(white(ink::FULL))
-                    .child(tr("Sign in to play")),
+                    .child(tr("Sign in to play online")),
             )
             .child(
                 div()
@@ -321,10 +312,10 @@ impl Launcher {
                     .flex_col()
                     .gap(px(8.))
                     .child(ui::text(14., FontWeight::NORMAL, ink::BODY).child(tr(
-                        "Horizon needs a Microsoft account that owns Minecraft: Java Edition, like other launchers.",
+                        "Optional: a Microsoft account lets you join online-mode servers with your name and skin. Offline play needs none.",
                     )))
                     .child(ui::text(14., FontWeight::NORMAL, ink::BODY).child(tr(
-                        "No Minecraft install needed: Horizon downloads it from Mojang for your account.",
+                        "An account that owns Minecraft: Java Edition can also download it from Mojang.",
                     )))
                     .child(ui::text(14., FontWeight::NORMAL, ink::QUIET).child(tr(
                         "Your worlds, offline names and settings stay where they are.",

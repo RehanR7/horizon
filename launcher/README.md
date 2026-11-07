@@ -485,14 +485,12 @@ The window, the command line and the MCP server all call the same core, `src/bac
 
 ## Microsoft accounts
 
-The launcher starts the game only while a Microsoft account that owns Minecraft: Java Edition is
-signed in, as other launchers do: without one, Play (Home, instances, `horizon-launcher play`, the
-MCP's `play`) says "Sign in with a Microsoft account that owns Minecraft: Java Edition to play"
-and starts nothing. Settings → Accounts signs in: the launcher shows a code, you enter it at
-microsoft.com/link, and the launcher checks that the account owns the game. It asks again at every
-Play, with the token renewal; with no network the last answer stands, and a "doesn't own" blocks
-at once. The account also plays online-mode servers under your own name and skin; offline names
-play LAN and offline-mode servers beside it. The game binary started directly (`horizon-client`,
+Playing needs no Microsoft account and no game ownership: Play (Home, instances,
+`horizon-launcher play`, the MCP's `play`) starts the game offline, and offline names work
+without one. Settings → Accounts signs in when you want to join online-mode servers under your
+own name and skin: the launcher shows a code, you enter it at microsoft.com/link, and the
+launcher checks whether the account owns the game (informational, and needed to download it from
+Mojang). It renews the token at every Play; with no network the last answer stands. The game binary started directly (`horizon-client`,
 `horizon-ctl launch`), the harnesses and the servers don't go through this check. Tokens live in the system keychain (Keychain,
 Credential Manager, or the Secret Service on Linux), never in a log or the command line;
 `accounts.json` in the data folder keeps only names and UUIDs. On Linux without a keychain they go

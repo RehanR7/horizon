@@ -5,12 +5,12 @@ ATLauncher, Modrinth App, HMCL or your own). The contract it relies on is the [L
 are in [launch-reference.md](launch-reference.md). `horizon-launcher` does all of this and is the reference
 implementation.
 
-## 0. Only for an owner
+## 0. No account required
 
-Horizon contains none of Minecraft's code, textures or sounds: it prepares them from the player's own copy. So
-every step below is for a player signed in with a Microsoft account that **owns Minecraft: Java Edition**, the
-same gate `horizon-launcher` applies before every start. Horizon never downloads Mojang's files; when your
-launcher downloads them (step 3), it does so only for that owner, as it would for vanilla.
+Horizon contains none of Minecraft's code, textures or sounds: it prepares them from the player's own copy.
+Playing needs no Microsoft account and no game ownership; sign in only for online-mode servers. Horizon never
+downloads Mojang's files; when your launcher downloads them (step 3), it does so only for an account that owns
+Minecraft: Java Edition, as it would for vanilla.
 
 ## 1. Pick a build
 

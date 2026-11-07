@@ -68,7 +68,7 @@ MCP: `prepare`.
 
 ## `horizon-launcher play`
 
-Start the client (needs a signed-in Microsoft account that owns Minecraft: Java Edition).
+Start the client (offline by default; sign in for online-mode servers).
 
     horizon-launcher play
 
@@ -148,7 +148,7 @@ MCP: `account_list`.
 
 ## `horizon-launcher account sign-in`
 
-Sign in with a Microsoft account in your browser (device code). Play needs one that owns Minecraft: Java Edition.
+Sign in with a Microsoft account in your browser (device code). Optional; it lets you join online-mode servers with your name and skin.
 
     horizon-launcher account sign-in
 

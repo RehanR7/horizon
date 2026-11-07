@@ -284,8 +284,8 @@ impl Launcher {
         let note: AnyElement = if first && configured && self.sign_in_state.is_none() {
             div()
                 .child(tr(
-                    "Sign in with the account that owns Minecraft: Java Edition. Your name and \
-                     skin come along to online servers, like in other launchers.",
+                    "Sign in with a Microsoft account to join online-mode servers with your name \
+                     and skin. Offline play needs no account.",
                 ))
                 .into_any_element()
         } else {

@@ -2078,8 +2078,8 @@ fn download_for_owner(
     log: &dyn Fn(String),
 ) -> Result<(), String> {
     let mut accounts = account::Accounts::load();
-    // The strict gate, never `launch_for_game`: the developer option that lets offline names
-    // play without an owner must not download the game for them.
+    // Downloads keep the strict entitlement check, never `launch_for_game`: playing offline
+    // without an owner must not download the game for anyone.
     let pass = account::launch(
         &account::Endpoints::live(),
         account::client_id().as_deref(),
@@ -3125,14 +3125,13 @@ pub fn need_prepared(tag: &str) -> Result<(), String> {
     }
 }
 
-/// The client's command, once the owner gate lets it start and its resources are prepared. Past
-/// the gate, a sign-in that can't be renewed (no network, expired) still lets the game start,
-/// offline.
+/// The client's command, once its resources are prepared. No account is required: without one,
+/// or with a sign-in that can't be renewed (no network, expired), the game starts offline.
 pub fn client(tag: &str) -> Result<Command, String> {
     client_as(tag, None)
 }
 
-/// What the command line adds to a refusal to play for want of an account.
+/// What the command line adds when an explicitly chosen account can't play.
 pub const SIGN_IN_HINT: &str = "Sign in with `horizon-launcher account sign-in`.";
 
 /// [`client`], playing as `who` for this launch only (`play --account`).
@@ -3141,7 +3140,7 @@ pub fn client_as(tag: &str, who: Option<&account::Player>) -> Result<Command, St
         return Err(error);
     }
     let session = match who {
-        None => account::session_for_game(&game_home(), false).map_err(|e| e.to_string()),
+        None => account::session_for_game(&game_home()).map_err(|e| e.to_string()),
         Some(who) => account::session_for_game_as(&game_home(), who),
     }
     .map_err(|refused| format!("{refused} {}", crate::i18n::tr(SIGN_IN_HINT)))?;
@@ -4404,10 +4403,7 @@ pub struct Settings {
     /// first-run question, or on the Play page once if they answered that before it existed.
     #[serde(default)]
     pub ping_notice_seen: bool,
-    /// The player without an account that owns the game has read, once, why the launcher needs
-    /// one now (the owner gate's screen).
-    #[serde(default)]
-    pub owner_notice_seen: bool,
+
     /// Seconds a partner banner (the sidebar's card or the Servers page's banner) has been on
     /// screen, over every start, up to `partner::SEEN_BEFORE_HIDE`: only then can the player hide it.
     #[serde(default)]
@@ -4463,12 +4459,6 @@ pub struct Settings {
     /// An older file's switch for the release profile, read when `native_profile` is unset.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub native_release: bool,
-    /// Developer options (hidden: seven clicks on the sidebar's launcher version reveal them):
-    /// offline names play without an account that owns the game, in the window only
-    /// (`account::Accounts::play_as_with`, `account::launch_for_game`). Never a download: the game still
-    /// comes from the player's own install. Off by default, and absent from the file while off.
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub dev_offline: bool,
 }
 
 impl Settings {
@@ -4734,8 +4724,8 @@ mod tests {
     }
 
     /// The launcher downloads Mojang's game files (client jar, libraries, assets) only for an
-    /// account the services said owns the game: never without one, and never past the gate by
-    /// the developer option (`Settings::dev_offline`), whose pass has no owner.
+    /// account the services said owns the game: never without one, and never because playing
+    /// offline passed the launch path with no owner.
     #[test]
     fn mojang_downloads_only_for_an_owner() {
         let dir = std::env::temp_dir().join(format!("horizon-owner-only-{}", std::process::id()));
