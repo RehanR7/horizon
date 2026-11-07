@@ -2897,6 +2897,12 @@ pub fn client_command(tag: &str) -> Command {
     if let Ok(exe) = std::env::current_exe() {
         cmd.env("HORIZON_LAUNCHER_EXE", exe);
     }
+    // Mesa's hasvk drives Ivy Bridge/Haswell and works, but reports no Vulkan conformance
+    // version, so wgpu hides it by default and the game may fall back to llvmpipe (software
+    // rendering). Showing it lets the game use the real GPU. Players can still override this.
+    if std::env::var_os("WGPU_ALLOW_UNDERLYING_NONCOMPLIANT_ADAPTER").is_none() {
+        cmd.env("WGPU_ALLOW_UNDERLYING_NONCOMPLIANT_ADAPTER", "1");
+    }
     // PipeWire remembers volume and mute per application name. The game's own name is
     // "PipeWire ALSA [horizon-client]", shared with development and test runs, where
     // muting it once left every later game silent: played from here it is "Horizon".
@@ -3498,9 +3504,12 @@ fn launcher_asset_running_from(appimage: bool) -> Option<&'static str> {
     }
 }
 
-/// Development builds and `HORIZON_LAUNCHER_NO_SELF_UPDATE` never replace themselves.
+/// Fork build: do not self-update to upstream Horizon releases, which would replace this
+/// launcher and revert fork changes (e.g. optional Microsoft-account/ownership behavior).
+/// Distribute fork updates via RehanR7/horizon releases; re-enable/update the channel there
+/// when fork release assets and update metadata are wired up.
 pub fn self_update_allowed() -> bool {
-    !cfg!(debug_assertions) && std::env::var_os("HORIZON_LAUNCHER_NO_SELF_UPDATE").is_none()
+    false
 }
 
 /// The version in `horizon-launcher --version`'s output (`horizon-launcher 0.1.5`).
