@@ -2189,22 +2189,10 @@ async fn open_with_retry(
             );
             match open_backend(backends, window, offscreen, true, layers, allow_cpu).await {
                 Ok(opened) => {
-                    let info = opened.adapter.get_info();
-                    if is_broken_haswell_vulkan(&info) {
-                        log::warn!(
-                            "Horizon renderer: skipping {} on Vulkan because Mesa hasvk suffers from \
-                             vertex corruption on Haswell; falling back to next backend",
-                            info.name
-                        );
-                        return Err(format!(
-                            "Mesa hasvk on Haswell ({}) has broken vertex buffers under Vulkan; falling back",
-                            info.name
-                        ));
-                    }
                     log::warn!(
                         "Horizon renderer: using {} although its driver reports no Vulkan \
                          conformance version",
-                        info.name
+                        opened.adapter.get_info().name
                     );
                     Ok(opened)
                 }
@@ -2227,6 +2215,32 @@ pub(crate) fn is_broken_haswell_vulkan(info: &wgpu::AdapterInfo) -> bool {
                 | 0x0a00..=0x0a2f // Haswell ULT (Ultrabook)
                 | 0x0d00..=0x0d2f // Haswell CRW (Crystal Well)
         ) || ["HSW", "Haswell"].iter().any(|tag| info.name.contains(tag)))
+}
+/// Why `open_backend` won't take `info`'s adapter: a software one (WARP, llvmpipe)
+/// unless `allow_cpu`, the last resort, and Mesa's broken Haswell Vulkan driver
+/// wherever it came from. `WGPU_ALLOW_UNDERLYING_NONCOMPLIANT_ADAPTER` in the
+/// environment, which a launcher or a player may set, shows that driver to the first
+/// try too; checking here rather than after `open_with_retry`'s second try keeps it
+/// out of the renderer either way, so the search reaches OpenGL (`crocus`) (#9912).
+fn rejected_adapter(info: &wgpu::AdapterInfo, name: &str, allow_cpu: bool) -> Option<NoDevice> {
+    if !allow_cpu && is_software(info.device_type) {
+        return Some(NoDevice::NoAdapter(format!(
+            "{name}: only a software adapter ({})",
+            info.name
+        )));
+    }
+    if is_broken_haswell_vulkan(info) {
+        log::warn!(
+            "Horizon renderer: skipping {} on Vulkan because Mesa hasvk suffers from vertex \
+             corruption on Haswell; trying the next backend",
+            info.name
+        );
+        return Some(NoDevice::Failed(format!(
+            "{name}: Mesa hasvk on Haswell ({}) has broken vertex buffers under Vulkan",
+            info.name
+        )));
+    }
+    None
 }
 /// Opens a device on `backends` alone: its surface, adapter and device, or what
 /// stopped it. `allow_nonconformant` is `open_with_retry`'s second try; a
@@ -2268,14 +2282,11 @@ async fn open_backend(
     // NoAdapter, so `open_with_retry` asks again: with the non-conformant
     // adapters shown, wgpu ranks a real GPU (hasvk on Ivy Bridge or Haswell)
     // above a software one. The second try's error is final either way.
-    if !allow_cpu && is_software(adapter.get_info().device_type) {
-        return Err(NoDevice::NoAdapter(format!(
-            "{name}: only a software adapter ({})",
-            adapter.get_info().name
-        )));
+    let info = adapter.get_info();
+    if let Some(rejected) = rejected_adapter(&info, name, allow_cpu) {
+        return Err(rejected);
     }
     describe_adapter(&adapter);
-    let info = adapter.get_info();
     let limits = adapter.limits();
     if let Err(e) = check_layers(&adapter, layers) {
         return Err(NoDevice::Failed(format!("{name}: {e}")));
@@ -12910,6 +12921,47 @@ mod tests {
         assert!(!is_software(wgpu::DeviceType::DiscreteGpu));
         assert!(!is_software(wgpu::DeviceType::IntegratedGpu));
         assert!(!is_software(wgpu::DeviceType::VirtualGpu));
+    }
+    /// A device search must never open the broken Haswell Vulkan driver, however the
+    /// adapter reached it: the non-conformant retry, or `WGPU_ALLOW_UNDERLYING_
+    /// NONCOMPLIANT_ADAPTER`, which the launcher sets and so shows it on the first try.
+    /// Its OpenGL driver (`crocus`) is the backend it falls to, and a software adapter
+    /// stays the last resort.
+    #[test]
+    fn haswell_vulkan_is_rejected_wherever_the_adapter_was_shown() {
+        use super::{NoDevice, rejected_adapter};
+        let mut haswell = adapter(wgpu::DeviceType::IntegratedGpu);
+        haswell.name = "Intel(R) HD Graphics 4400 (HSW GT2)".into();
+        haswell.vendor = 0x8086;
+        haswell.device = 0x0a16;
+        assert!(matches!(
+            rejected_adapter(&haswell, "Vulkan", false),
+            Some(NoDevice::Failed(_))
+        ));
+        // Even the CPU-allowed last resort doesn't take it: llvmpipe is the fallback.
+        assert!(matches!(
+            rejected_adapter(&haswell, "Vulkan", true),
+            Some(NoDevice::Failed(_))
+        ));
+
+        // The same GPU's OpenGL driver is what the search opens instead.
+        let mut opengl = haswell.clone();
+        opengl.backend = wgpu::Backend::Gl;
+        assert!(rejected_adapter(&opengl, "OpenGL", false).is_none());
+
+        // Ivy Bridge's hasvk works and keeps Vulkan (#4059).
+        let mut ivy = haswell.clone();
+        ivy.name = "Intel(R) HD Graphics 4000 (IVB GT2)".into();
+        ivy.device = 0x0166;
+        assert!(rejected_adapter(&ivy, "Vulkan", false).is_none());
+
+        // A software adapter is refused until nothing else is left.
+        let cpu = adapter(wgpu::DeviceType::Cpu);
+        assert!(matches!(
+            rejected_adapter(&cpu, "Vulkan", false),
+            Some(NoDevice::NoAdapter(_))
+        ));
+        assert!(rejected_adapter(&cpu, "Vulkan", true).is_none());
     }
     #[test]
     fn auto_uses_directx_12_first_on_windows_arm64() {
